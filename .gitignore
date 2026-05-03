@@ -1,0 +1,21 @@
+# dependencies
+node_modules/
+
+# env files
+.env
+.env.*
+
+# build files
+dist/
+build/
+
+# logs
+logs
+*.log
+
+# OS / editor
+.DS_Store
+.vscode/
+r eaeg
+# coverage
+coverage/
