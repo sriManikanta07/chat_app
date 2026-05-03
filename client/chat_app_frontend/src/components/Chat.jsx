@@ -11,7 +11,7 @@ export default function Chat({
   sendMessage,
   message,
   setMessage,
-
+  setSelectedFriend,
   onlineUsers = [],
 }) {
   const [activeTab, setActiveTab] = useState("chats");
@@ -141,11 +141,37 @@ export default function Chat({
   return (
     <div className="h-screen flex flex-col bg-gray-100">
       {/* HEADER */}
-      <div className="bg-blue-500 text-white p-4 text-center font-semibold">
+      {/* <div className="bg-blue-500 text-white p-4 text-center font-semibold">
         {activeTab === "chats" &&
           (selectedFriend ? selectedFriend.username : "Chats")}
         {activeTab === "friends" && "Friends"}
         {activeTab === "requests" && "Requests"}
+      </div> */}
+      <div className="bg-blue-500 text-white p-4 flex items-center gap-3">
+        {/* BACK BUTTON */}
+        {selectedFriend && (
+          <button
+            onClick={() => {
+              setSelectedFriend(null);
+              setActiveTab("chats");
+            }}
+            className="text-xl font-bold"
+          >
+            ←
+          </button>
+        )}
+
+        <div>
+          <div className="font-semibold">
+            {selectedFriend ? selectedFriend.username : "Chats"}
+          </div>
+
+          {selectedFriend && (
+            <div className="text-xs text-green-200">
+              {onlineUsers.includes(selectedFriend._id) ? "Online" : "Offline"}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* CONTENT */}
