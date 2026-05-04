@@ -18,7 +18,7 @@ export default function Auth({ setUser }) {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState(null); // { text, ok }
-  const url = "http://localhost:5000";
+  const url = "https://chat-app-backend-h1ex.onrender.com";
 
   const checkUsername = async (value) => {
     try {
