@@ -84,51 +84,43 @@ export default function Chat({
   const [showFriends, setShowFriends] = useState([]);
   const bottomRef = useRef(null);
 
+  const url = "http://localhost:5000";
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, typingUser]);
 
   const fetchFriends = async () => {
-    const r = await axios.get(
-      `http://localhost:5000/api/friends/friends/${user._id}`,
-    );
+    const r = await axios.get(`${url}/api/friends/friends/${user._id}`);
     setFriends(r.data);
   };
   const fetchSentRequests = async () => {
     try {
-      const r = await axios.get(
-        `http://localhost:5000/api/friends/sent/${user._id}`,
-      );
+      const r = await axios.get(`${url}/api/friends/sent/${user._id}`);
       setSentRequests(r.data.map((u) => u._id));
     } catch {}
   };
   const fetchRequests = async () => {
     try {
-      const r = await axios.get(
-        `http://localhost:5000/api/friends/requests/${user._id}`,
-      );
+      const r = await axios.get(`${url}/api/friends/requests/${user._id}`);
       setRequests(r.data);
     } catch {}
   };
   const updateShowFriends = async () => {
-    const r = await axios.get(
-      `http://localhost:5000/api/friends/friends/${user._id}`,
-    );
+    const r = await axios.get(`${url}/api/friends/friends/${user._id}`);
     setShowFriends(r.data);
   };
   const searchUsers = async () => {
     if (!search) return;
     try {
-      const r = await axios.get(
-        `http://localhost:5000/api/friends/search/${search}`,
-      );
+      const r = await axios.get(`${url}/api/friends/search/${search}`);
       setResults(r.data);
       setTimeout(() => setResults([]), 5000);
     } catch {}
   };
   const sendRequest = async (receiverId) => {
     try {
-      await axios.post("http://localhost:5000/api/friends/send", {
+      await axios.post(`${url}/api/friends/send`, {
         senderId: user._id,
         receiverId,
       });
@@ -136,7 +128,7 @@ export default function Chat({
     } catch {}
   };
   const acceptRequest = async (senderId) => {
-    await axios.post("http://localhost:5000/api/friends/accept", {
+    await axios.post(`${url}/api/friends/accept`, {
       userId: user._id,
       senderId,
     });
@@ -144,7 +136,7 @@ export default function Chat({
     setRequests((p) => p.filter((r) => r._id !== senderId));
   };
   const rejectRequest = async (senderId) => {
-    await axios.post("http://localhost:5000/api/friends/reject", {
+    await axios.post(`${url}/api/friends/reject`, {
       userId: user._id,
       senderId,
     });

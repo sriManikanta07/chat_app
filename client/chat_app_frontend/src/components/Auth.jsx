@@ -18,12 +18,11 @@ export default function Auth({ setUser }) {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState(null); // { text, ok }
+  const url = "http://localhost:5000";
 
   const checkUsername = async (value) => {
     try {
-      const res = await axios.get(
-        `http://localhost:5000/api/auth/check-username/${value}`,
-      );
+      const res = await axios.get(`${url}/api/auth/check-username/${value}`);
       setIsAvailable(res.data.available);
     } catch {}
   };
@@ -36,10 +35,10 @@ export default function Auth({ setUser }) {
     }
     setLoading(true);
     try {
-      const url = isLogin
-        ? "http://localhost:5000/api/auth/login"
-        : "http://localhost:5000/api/auth/register";
-      const res = await axios.post(url, form);
+      const endpoint = isLogin
+        ? `${url}/api/auth/login`
+        : `${url}/api/auth/register`;
+      const res = await axios.post(endpoint, form);
       if (isLogin) {
         const user = res.data.user;
         setUser(user);

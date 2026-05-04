@@ -13,11 +13,11 @@ function App() {
   const [typingUser, setTypingUser] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState([]);
 
+  const url = "http://localhost:5000";
+
   // FETCH FRIENDS
   const fetchFriends = async () => {
-    const res = await axios.get(
-      `http://localhost:5000/api/friends/friends/${user._id}`,
-    );
+    const res = await axios.get(`${url}/api/friends/friends/${user._id}`);
     setFriends(res.data);
   };
 
@@ -64,7 +64,7 @@ function App() {
 
     try {
       const res = await axios.get(
-        `http://localhost:5000/api/messages/${user._id}/${friend._id}`,
+        `${url}/api/messages/${user._id}/${friend._id}`,
       );
 
       const formatted = res.data.map((msg) => ({

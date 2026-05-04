@@ -26,7 +26,7 @@ app.use("/api/messages", messageRoutes);
 
 app.use("/api/friends", friendRoutes);
 
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 connectDB();
 // app.listen(PORT, () => {
 //   console.log(`Server running on port ${PORT}`);
@@ -89,7 +89,7 @@ io.on("connection", (socket) => {
       });
     }
   });
-  
+
   socket.on("requestAction", ({ receiverId }) => {
     const receiverSocket = onlineUsers[receiverId];
 
@@ -97,7 +97,6 @@ io.on("connection", (socket) => {
       io.to(receiverSocket).emit("refreshRequests");
     }
   });
-
 
   socket.on("stopTyping", ({ senderId, receiverId }) => {
     const receiverSocket = onlineUsers[receiverId];
