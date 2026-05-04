@@ -1,10 +1,70 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import socket from "../socket";
 
+/* ─── helpers ─── */
+const getInitials = (name = "") =>
+  name
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+
+const avatarColor = (name = "") => {
+  const palette = [
+    "#00a884",
+    "#25d366",
+    "#128c7e",
+    "#075e54",
+    "#34b7f1",
+    "#dfe5e7",
+  ];
+  let h = 0;
+  for (let c of name) h = (h * 31 + c.charCodeAt(0)) & 0xffff;
+  return palette[h % palette.length];
+};
+
+const Avatar = ({ name, size = 40 }) => (
+  <div
+    style={{
+      width: size,
+      height: size,
+      minWidth: size,
+      borderRadius: "50%",
+      background: avatarColor(name),
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: size * 0.38,
+      fontWeight: 700,
+      color: "#fff",
+      fontFamily: "'Segoe UI', system-ui, sans-serif",
+      flexShrink: 0,
+    }}
+  >
+    {getInitials(name)}
+  </div>
+);
+
+const formatTime = () =>
+  new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+/* ─── font ─── */
+if (typeof document !== "undefined" && !document.getElementById("wa-noto")) {
+  const l = document.createElement("link");
+  l.id = "wa-noto";
+  l.rel = "stylesheet";
+  l.href =
+    "https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600&display=swap";
+  document.head.appendChild(l);
+}
+
+/* ═══════════════════════════════════════
+   COMPONENT
+═══════════════════════════════════════ */
 export default function Chat({
   user,
-  friends = [],
   messages = [],
   selectedFriend,
   openChat,
@@ -20,401 +80,610 @@ export default function Chat({
   const [sentRequests, setSentRequests] = useState([]);
   const [requests, setRequests] = useState([]);
   const [typingUser, setTypingUser] = useState(null);
-
-  const searchUsers = async () => {
-    if (!search) return;
-
-    try {
-      console.log(`Searching for users with username: ${search}`);
-      const res = await axios.get(
-        `http://localhost:5000/api/friends/search/${search}`,
-      );
-
-      setResults(res.data);
-    } catch (err) {
-      console.log(err);
-    }
-  };
+  const [friends, setFriends] = useState([]);
+  const [showFriends, setShowFriends] = useState([]);
+  const bottomRef = useRef(null);
 
   useEffect(() => {
-    socket.on("typing", ({ senderId }) => {
-      console.log("RECEIVED TYPING FROM:", senderId);
-      setTypingUser(senderId);
-    });
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, typingUser]);
 
-    socket.on("stopTyping", () => {
-      setTypingUser(null);
-    });
-
-    return () => {
-      socket.off("typing");
-      socket.off("stopTyping");
-    };
-  }, []);
-
+  const fetchFriends = async () => {
+    const r = await axios.get(
+      `http://localhost:5000/api/friends/friends/${user._id}`,
+    );
+    setFriends(r.data);
+  };
   const fetchSentRequests = async () => {
     try {
-      const res = await axios.get(
+      const r = await axios.get(
         `http://localhost:5000/api/friends/sent/${user._id}`,
       );
-
-      // store only receiver IDs
-      const ids = res.data.map((u) => u._id);
-      setSentRequests(ids);
-    } catch (err) {
-      console.log(err);
-    }
+      setSentRequests(r.data.map((u) => u._id));
+    } catch {}
   };
-
   const fetchRequests = async () => {
     try {
-      const res = await axios.get(
+      const r = await axios.get(
         `http://localhost:5000/api/friends/requests/${user._id}`,
       );
-
-      setRequests(res.data);
-    } catch (err) {
-      console.log(err);
-    }
+      setRequests(r.data);
+    } catch {}
   };
-
-  useEffect(() => {
-    if (activeTab === "requests") {
-      fetchRequests();
-    }
-  }, [activeTab]);
-
-  useEffect(() => {
-    fetchSentRequests();
-  }, []);
-
+  const updateShowFriends = async () => {
+    const r = await axios.get(
+      `http://localhost:5000/api/friends/friends/${user._id}`,
+    );
+    setShowFriends(r.data);
+  };
+  const searchUsers = async () => {
+    if (!search) return;
+    try {
+      const r = await axios.get(
+        `http://localhost:5000/api/friends/search/${search}`,
+      );
+      setResults(r.data);
+      setTimeout(() => setResults([]), 5000);
+    } catch {}
+  };
   const sendRequest = async (receiverId) => {
     try {
       await axios.post("http://localhost:5000/api/friends/send", {
         senderId: user._id,
         receiverId,
       });
-
-      // update UI instantly
-      setSentRequests((prev) => [...prev, receiverId]);
-    } catch (err) {
-      console.log(err);
-    }
+      setSentRequests((p) => [...p, receiverId]);
+    } catch {}
   };
-
   const acceptRequest = async (senderId) => {
     await axios.post("http://localhost:5000/api/friends/accept", {
       userId: user._id,
       senderId,
     });
-
-    socket.emit("requestAction", {
-      receiverId: senderId,
-    });
-
-    // remove instantly from UI
-    setRequests((prev) => prev.filter((r) => r._id !== senderId));
-
-    // refresh friends
-    window.location.reload(); // simple for now
+    socket.emit("requestAction", { receiverId: senderId });
+    setRequests((p) => p.filter((r) => r._id !== senderId));
   };
-
   const rejectRequest = async (senderId) => {
     await axios.post("http://localhost:5000/api/friends/reject", {
       userId: user._id,
       senderId,
     });
-
-    socket.emit("requestAction", {
-      receiverId: senderId,
-    });
-
-    setRequests((prev) => prev.filter((r) => r._id !== senderId));
+    socket.emit("requestAction", { receiverId: senderId });
+    setRequests((p) => p.filter((r) => r._id !== senderId));
   };
 
   useEffect(() => {
+    socket.on("typing", ({ senderId }) => setTypingUser(senderId));
+    socket.on("stopTyping", () => setTypingUser(null));
+    return () => {
+      socket.off("typing");
+      socket.off("stopTyping");
+    };
+  }, []);
+  useEffect(() => {
+    fetchRequests();
+  }, [activeTab]);
+  useEffect(() => {
+    fetchRequests();
+    fetchFriends();
+    setShowFriends(friends);
+  }, []);
+  useEffect(() => {
+    updateShowFriends();
+    fetchSentRequests();
+  }, [activeTab]);
+  useEffect(() => {
     socket.on("refreshRequests", fetchRequests);
-
     return () => socket.off("refreshRequests");
   }, []);
 
+  const waBg = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cg opacity='.04' fill='%23fff'%3E%3Ccircle cx='10' cy='10' r='3'/%3E%3Ccircle cx='30' cy='10' r='3'/%3E%3Ccircle cx='50' cy='10' r='3'/%3E%3Ccircle cx='20' cy='25' r='3'/%3E%3Ccircle cx='40' cy='25' r='3'/%3E%3Ccircle cx='10' cy='40' r='3'/%3E%3Ccircle cx='30' cy='40' r='3'/%3E%3Ccircle cx='50' cy='40' r='3'/%3E%3Ccircle cx='20' cy='55' r='3'/%3E%3Ccircle cx='40' cy='55' r='3'/%3E%3C/g%3E%3C/svg%3E")`;
+
   return (
-    <div className="h-screen flex flex-col bg-gray-100">
-      {/* HEADER */}
-      {/* <div className="bg-blue-500 text-white p-4 text-center font-semibold">
-        {activeTab === "chats" &&
-          (selectedFriend ? selectedFriend.username : "Chats")}
-        {activeTab === "friends" && "Friends"}
-        {activeTab === "requests" && "Requests"}
-      </div> */}
-      <div className="bg-blue-500 text-white p-4 flex items-center gap-3">
-        {/* BACK BUTTON */}
-        {selectedFriend && (
-          <button
-            onClick={() => {
-              setSelectedFriend(null);
-              setActiveTab("chats");
-            }}
-            className="text-xl font-bold"
-          >
-            ←
-          </button>
-        )}
+    <>
+      <style>{`
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        .wa-root {
+          height: 100svh; display: flex; flex-direction: column;
+          background: #111b21; font-family: 'Noto Sans', 'Segoe UI', system-ui, sans-serif;
+          color: #e9edef; overflow: hidden;
+        }
+        .wa-header {
+          background: #202c33; padding: 10px 16px;
+          display: flex; align-items: center; justify-content: space-between;
+          gap: 12px; flex-shrink: 0; min-height: 59px;
+        }
+        .wa-header-left { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
+        .wa-back-btn { background: none; border: none; color: #aebac1; cursor: pointer; font-size: 22px; padding: 0 4px; line-height: 1; transition: color .15s; }
+        .wa-back-btn:hover { color: #e9edef; }
+        .wa-header-info { min-width: 0; flex: 1; }
+        .wa-header-name { font-size: 16px; font-weight: 600; color: #e9edef; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
+        .wa-header-sub { font-size: 12px; margin-top: 1px; }
+        .wa-online { color: #00a884; }
+        .wa-offline { color: #8696a0; }
+        .wa-header-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+        .wa-icon-btn { background: none; border: none; cursor: pointer; color: #aebac1; padding: 8px; border-radius: 50%; font-size: 20px; transition: background .15s, color .15s; position: relative; display: flex; align-items: center; justify-content: center; }
+        .wa-icon-btn:hover { background: #2a3942; color: #e9edef; }
+        .wa-badge { position: absolute; top: 2px; right: 2px; background: #00a884; color: #111b21; font-size: 9px; font-weight: 700; min-width: 15px; height: 15px; border-radius: 8px; display: flex; align-items: center; justify-content: center; padding: 0 3px; border: 2px solid #202c33; }
+        .wa-search-wrap { background: #111b21; padding: 8px 12px; flex-shrink: 0; }
+        .wa-search-inner { display: flex; align-items: center; gap: 8px; background: #202c33; border-radius: 8px; padding: 7px 12px; }
+        .wa-search-icon { color: #8696a0; font-size: 15px; flex-shrink: 0; }
+        .wa-search-input { flex: 1; background: none; border: none; outline: none; font-size: 14px; color: #e9edef; font-family: inherit; }
+        .wa-search-input::placeholder { color: #8696a0; }
+        .wa-search-go { background: #00a884; border: none; border-radius: 6px; padding: 5px 12px; color: #111b21; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; transition: background .15s; white-space: nowrap; }
+        .wa-search-go:hover { background: #06cf9c; }
+        .wa-content { flex: 1; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #2a3942 transparent; }
+        .wa-content::-webkit-scrollbar { width: 6px; }
+        .wa-content::-webkit-scrollbar-thumb { background: #2a3942; border-radius: 3px; }
+        .wa-section-label { padding: 18px 16px 6px; font-size: 12px; font-weight: 600; color: #00a884; letter-spacing: .04em; text-transform: uppercase; }
+        .wa-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer; transition: background .1s; position: relative; }
+        .wa-row::after { content: ''; position: absolute; bottom: 0; left: 72px; right: 0; height: 1px; background: #1f2c33; }
+        .wa-row:hover { background: #2a3942; }
+        .wa-row-body { flex: 1; min-width: 0; }
+        .wa-row-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+        .wa-row-name { font-size: 16px; font-weight: 500; color: #e9edef; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .wa-row-sub { font-size: 13px; color: #8696a0; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .wa-row-sub.online-sub { color: #00a884; }
+        .wa-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 56px 32px; gap: 14px; }
+        .wa-empty-icon { font-size: 52px; opacity: .35; }
+        .wa-empty-text { color: #8696a0; font-size: 14px; text-align: center; line-height: 1.6; }
+        .wa-messages-wrap { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+        .wa-messages-bg { flex: 1; overflow-y: auto; padding: 10px 5%; display: flex; flex-direction: column; gap: 2px; scrollbar-width: thin; scrollbar-color: #2a3942 transparent; background-color: #0b141a; background-image: ${waBg}; }
+        .wa-messages-bg::-webkit-scrollbar { width: 6px; }
+        .wa-messages-bg::-webkit-scrollbar-thumb { background: #2a3942; border-radius: 3px; }
+        .wa-date-chip { align-self: center; background: #182229; color: #8696a0; font-size: 11.5px; padding: 5px 12px; border-radius: 8px; margin: 8px 0; box-shadow: 0 1px 2px #0003; }
+        .wa-bubble-row { display: flex; flex-direction: column; }
+        .wa-bubble-row.me { align-items: flex-end; }
+        .wa-bubble-row.them { align-items: flex-start; }
+        .wa-bubble { max-width: 72%; padding: 7px 10px 4px; border-radius: 7.5px; font-size: 14.2px; line-height: 1.5; word-break: break-word; position: relative; box-shadow: 0 1px 2px #0003; margin-bottom: 2px; }
+        .wa-bubble.me { background: #005c4b; color: #e9edef; border-top-right-radius: 0; }
+        .wa-bubble.them { background: #202c33; color: #e9edef; border-top-left-radius: 0; }
+        .wa-bubble-meta { display: flex; align-items: center; justify-content: flex-end; gap: 3px; margin-top: 3px; }
+        .wa-bubble-time { font-size: 10.5px; color: #8696a0; }
+        .wa-tick { font-size: 13px; color: #53bdeb; }
+        .wa-typing-row { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 2px; }
+        .wa-typing-bubble { background: #202c33; border-radius: 7.5px; border-top-left-radius: 0; padding: 12px 16px; display: flex; gap: 5px; align-items: center; box-shadow: 0 1px 2px #0003; }
+        .wa-typing-bubble span { width: 8px; height: 8px; border-radius: 50%; background: #8696a0; animation: waBounce 1.2s infinite ease-in-out; display: inline-block; }
+        .wa-typing-bubble span:nth-child(2) { animation-delay: .2s; }
+        .wa-typing-bubble span:nth-child(3) { animation-delay: .4s; }
+        @keyframes waBounce { 0%,80%,100% { transform: scale(1); opacity: .5; } 40% { transform: scale(1.3); opacity: 1; } }
+        .wa-input-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #202c33; flex-shrink: 0; }
+        .wa-msg-input { flex: 1; background: #2a3942; border: none; border-radius: 24px; padding: 10px 16px; font-size: 15px; color: #e9edef; outline: none; font-family: inherit; transition: background .15s; }
+        .wa-msg-input::placeholder { color: #8696a0; }
+        .wa-msg-input:focus { background: #3b4a54; }
+        .wa-send-btn { width: 46px; height: 46px; border-radius: 50%; border: none; background: #00a884; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: background .15s, transform .1s; box-shadow: 0 2px 8px #00a88440; }
+        .wa-send-btn:hover { background: #06cf9c; }
+        .wa-send-btn:active { transform: scale(.93); }
+        .wa-send-btn svg { width: 20px; height: 20px; fill: #fff; }
+        .wa-tag { font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 20px; white-space: nowrap; }
+        .wa-tag-friend { background: #2a3942; color: #8696a0; }
+        .wa-tag-pending { background: #2a2010; color: #e9a43a; border: 1px solid #5a4020; }
+        .wa-btn-add { font-size: 12px; font-weight: 700; padding: 5px 14px; border-radius: 20px; border: none; cursor: pointer; background: #00a884; color: #111b21; transition: background .15s; font-family: inherit; }
+        .wa-btn-add:hover { background: #06cf9c; }
+        .wa-btn-accept { font-size: 20px; background: none; border: none; cursor: pointer; color: #00a884; padding: 4px 8px; border-radius: 50%; transition: background .15s; }
+        .wa-btn-accept:hover { background: #0f2922; }
+        .wa-btn-reject { font-size: 20px; background: none; border: none; cursor: pointer; color: #f15c6d; padding: 4px 8px; border-radius: 50%; transition: background .15s; }
+        .wa-btn-reject:hover { background: #2d1018; }
+        .wa-bottom-nav { display: flex; background: #202c33; border-top: 1px solid #1f2c33; flex-shrink: 0; }
+        .wa-nav-btn { flex: 1; background: none; border: none; cursor: pointer; padding: 10px 8px; display: flex; flex-direction: column; align-items: center; gap: 3px; color: #8696a0; font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; font-family: inherit; transition: color .15s; position: relative; }
+        .wa-nav-btn.active { color: #00a884; }
+        .wa-nav-btn.active::after { content: ''; position: absolute; top: 0; left: 25%; right: 25%; height: 2px; background: #00a884; border-radius: 0 0 3px 3px; }
+        .wa-nav-icon { font-size: 21px; line-height: 1; }
+        .wa-nav-badge { position: absolute; top: 6px; right: calc(50% - 18px); background: #00a884; color: #111b21; font-size: 9px; font-weight: 800; min-width: 15px; height: 15px; border-radius: 8px; display: flex; align-items: center; justify-content: center; padding: 0 3px; border: 2px solid #202c33; }
+      `}</style>
 
-        <div>
-          <div className="font-semibold">
-            {selectedFriend ? selectedFriend.username : "Chats"}
-          </div>
-
-          {selectedFriend && (
-            <div className="text-xs text-green-200">
-              {onlineUsers.includes(selectedFriend._id) ? "Online" : "Offline"}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* CONTENT */}
-      <div className="flex-1 overflow-y-auto">
-        {/* CHATS TAB */}
-        {activeTab === "chats" && !selectedFriend && (
-          <div>
-            {friends.length === 0 ? (
-              <p className="text-center mt-10 text-gray-500">No friends yet</p>
-            ) : (
-              friends.map((f) => (
-                <div
-                  key={f._id}
-                  onClick={() => {
-                    openChat(f);
-                    setActiveTab("chats"); // 🔥 IMPORTANT
-                  }}
-                  className="p-4 border-b cursor-pointer hover:bg-gray-200"
-                >
-                  {f.username}
-                </div>
-              ))
+      <div className="wa-root">
+        {/* ══════ HEADER ══════ */}
+        <header className="wa-header">
+          <div className="wa-header-left">
+            {selectedFriend && (
+              <button
+                className="wa-back-btn"
+                onClick={() => {
+                  setSelectedFriend(null);
+                  setActiveTab("chats");
+                }}
+              >
+                ←
+              </button>
             )}
-          </div>
-        )}
-
-        {/* CHAT WINDOW */}
-        {activeTab === "chats" && selectedFriend && (
-          <div className="flex flex-col h-full">
-            <div className="flex-1 p-3 overflow-y-auto">
-              {messages.map((msg, i) => {
-                const isMe = String(msg.senderId) === String(user._id);
-
-                return (
-                  <div
-                    key={i}
-                    className={`mb-2 flex ${
-                      isMe ? "justify-end" : "justify-start"
-                    }`}
-                  >
-                    <div
-                      className={`px-4 py-2 rounded-lg max-w-xs ${
-                        isMe ? "bg-blue-500 text-white" : "bg-white"
-                      }`}
-                    >
-                      {msg.message}
-                    </div>
+            {selectedFriend ? (
+              <>
+                <Avatar name={selectedFriend.username} size={40} />
+                <div className="wa-header-info">
+                  <div className="wa-header-name">
+                    {selectedFriend.username}
                   </div>
-                );
-              })}
-            </div>
-
-            {/* typing */}
-            {/* {String(typingUser) === String(selectedFriend?._id) && (
-              <p>typing...</p>
-            )} */}
-            {typingUser === selectedFriend._id && (
-              <div className="px-3 py-1 mx-3">
-                <div className="flex gap-1">
-                  <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></span>
-                  <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce delay-150"></span>
-                  <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce delay-300"></span>
+                  <div
+                    className={`wa-header-sub ${onlineUsers.includes(selectedFriend._id) ? "wa-online" : "wa-offline"}`}
+                  >
+                    {onlineUsers.includes(selectedFriend._id)
+                      ? "online"
+                      : "last seen recently"}
+                  </div>
                 </div>
+              </>
+            ) : (
+              <div
+                className="wa-header-name"
+                style={{ fontSize: 20, fontWeight: 700 }}
+              >
+                {activeTab === "chats" && "ChatsApp"}
+                {activeTab === "friends" && "Friends"}
+                {activeTab === "requests" && "Requests"}
+                {activeTab === "bot" && "AI Assistant"}
               </div>
             )}
-            {/* input */}
-            <div className="p-3 flex gap-2">
-              {/* <input
-                className="flex-1 p-2 border rounded-lg"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder="Type message"
-              /> */}
-              <input
-                className="flex-1 p-2 border rounded-lg"
-                value={message}
-                placeholder="Type message"
-                onChange={(e) => {
-                  const text = e.target.value;
-                  setMessage(text);
+          </div>
+          <div className="wa-header-actions">
+            <button
+              className="wa-icon-btn"
+              title="Find friends"
+              onClick={() => setActiveTab("friends")}
+            >
+              🔍
+            </button>
+            <button
+              className="wa-icon-btn"
+              title="Requests"
+              onClick={() =>
+                setActiveTab(activeTab === "requests" ? "chats" : "requests")
+              }
+            >
+              🔔
+              {requests.length > 0 && (
+                <span className="wa-badge">{requests.length}</span>
+              )}
+            </button>
+            <button className="wa-icon-btn" title="More">
+              ⋮
+            </button>
+          </div>
+        </header>
 
-                  if (!selectedFriend) return;
+        {/* ══════ CONTENT ══════ */}
+        <div className="wa-content">
+          {/* ── CHATS LIST ── */}
+          {activeTab === "chats" && !selectedFriend && (
+            <>
+              <div className="wa-search-wrap">
+                <div className="wa-search-inner">
+                  <span className="wa-search-icon">🔍</span>
+                  <input
+                    className="wa-search-input"
+                    placeholder="Search or start new chat"
+                    readOnly
+                    onClick={() => setActiveTab("friends")}
+                  />
+                </div>
+              </div>
+              {friends.length === 0 ? (
+                <div className="wa-empty">
+                  <div className="wa-empty-icon">💬</div>
+                  <div className="wa-empty-text">
+                    No chats yet.
+                    <br />
+                    Add friends to get started.
+                  </div>
+                </div>
+              ) : (
+                friends.map((f) => {
+                  const isOnline = onlineUsers.includes(f._id);
+                  return (
+                    <div
+                      key={f._id}
+                      className="wa-row"
+                      onClick={() => {
+                        openChat(f);
+                        setActiveTab("chats");
+                      }}
+                    >
+                      <Avatar name={f.username} size={49} />
+                      <div className="wa-row-body">
+                        <div className="wa-row-top">
+                          <span className="wa-row-name">{f.username}</span>
+                          {isOnline && (
+                            <span
+                              style={{
+                                width: 9,
+                                height: 9,
+                                borderRadius: "50%",
+                                background: "#00a884",
+                                flexShrink: 0,
+                                display: "inline-block",
+                              }}
+                            />
+                          )}
+                        </div>
+                        <div
+                          className={`wa-row-sub ${isOnline ? "online-sub" : ""}`}
+                        >
+                          {isOnline ? "online" : "Tap to chat"}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </>
+          )}
 
-                  socket.emit("typing", {
-                    senderId: user._id,
-                    receiverId: selectedFriend._id,
-                  });
+          {/* ── CHAT WINDOW ── */}
+          {activeTab === "chats" && selectedFriend && (
+            <div
+              className="wa-messages-wrap"
+              style={{ height: "100%", overflow: "hidden" }}
+            >
+              <div className="wa-messages-bg">
+                <div className="wa-date-chip">Today</div>
+                {messages.length === 0 && (
+                  <div className="wa-empty" style={{ paddingTop: 32 }}>
+                    <div className="wa-empty-icon">🔒</div>
+                    <div className="wa-empty-text" style={{ fontSize: 12 }}>
+                      Messages are end-to-end encrypted.
+                      <br />
+                      Say hi!
+                    </div>
+                  </div>
+                )}
+                {messages.map((msg, i) => {
+                  const isMe = String(msg.senderId) === String(user._id);
+                  return (
+                    <div
+                      key={i}
+                      className={`wa-bubble-row ${isMe ? "me" : "them"}`}
+                    >
+                      <div className={`wa-bubble ${isMe ? "me" : "them"}`}>
+                        {msg.message}
+                        <div className="wa-bubble-meta">
+                          <span className="wa-bubble-time">{formatTime()}</span>
+                          {isMe && <span className="wa-tick">✓✓</span>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {typingUser === selectedFriend._id && (
+                  <div className="wa-typing-row">
+                    <div className="wa-typing-bubble">
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                  </div>
+                )}
+                <div ref={bottomRef} />
+              </div>
 
-                  clearTimeout(window.typingTimeout);
-
-                  window.typingTimeout = setTimeout(() => {
-                    socket.emit("stopTyping", {
+              <div className="wa-input-bar">
+                <button
+                  className="wa-icon-btn"
+                  style={{ color: "#8696a0", fontSize: 22 }}
+                >
+                  😊
+                </button>
+                <input
+                  className="wa-msg-input"
+                  value={message}
+                  placeholder="Message"
+                  onChange={(e) => {
+                    setMessage(e.target.value);
+                    if (!selectedFriend) return;
+                    socket.emit("typing", {
                       senderId: user._id,
                       receiverId: selectedFriend._id,
                     });
-                  }, 1000); // ✅ 1.5 sec
-                }}
-              />
-              <button
-                onClick={sendMessage}
-                className="bg-blue-500 text-white px-4 rounded-lg"
-              >
-                Send
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* FRIENDS TAB */}
-        {activeTab === "friends" && (
-          <div className="p-4">
-            {/* SEARCH BOX */}
-            <div className="flex gap-2 mb-4">
-              <input
-                className="flex-1 p-2 border rounded-lg"
-                placeholder="Search username..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              <button
-                onClick={searchUsers}
-                className="bg-blue-500 text-white px-3 rounded-lg"
-              >
-                Search
-              </button>
-            </div>
-
-            {/*SEARCH RESULTS */}
-            {/* {results.map((u) => (
-              <div
-                key={u._id}
-                className="p-3 border-b flex justify-between items-center"
-              >
-                <span>{u.username}</span>
+                    clearTimeout(window.typingTimeout);
+                    window.typingTimeout = setTimeout(() => {
+                      socket.emit("stopTyping", {
+                        senderId: user._id,
+                        receiverId: selectedFriend._id,
+                      });
+                    }, 1000);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") sendMessage();
+                  }}
+                />
                 <button
-                  onClick={() => sendRequest(u._id)}
-                  className="bg-green-500 text-white px-3 py-1 rounded-lg text-sm"
+                  className="wa-send-btn"
+                  onClick={sendMessage}
+                  aria-label="Send"
                 >
-                  Add
+                  <svg viewBox="0 0 24 24">
+                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                  </svg>
                 </button>
               </div>
-            ))} */}
-            {results.map((u) => {
-              const isFriend = friends.some((f) => f._id === u._id);
-              const isRequested = sentRequests.includes(u._id);
+            </div>
+          )}
 
-              return (
+          {activeTab === "bot" && (
+            <div className="wa-bot-container">
+              <div className="wa-bot-header">
+                <h3>AI Assistant</h3>
+              </div>
+
+              <p>AI Assistant is under development</p>
+            </div>
+          )}
+
+          {/* ── FRIENDS TAB ── */}
+          {activeTab === "friends" && (
+            <>
+              <div style={{ padding: "10px 12px 6px" }}>
                 <div
-                  key={u._id}
-                  className="p-3 border-b flex justify-between items-center"
+                  className="wa-search-inner"
+                  style={{ background: "#2a3942", borderRadius: 8 }}
                 >
-                  <span>{u.username}</span>
-
-                  {isFriend ? (
-                    <button className="bg-gray-400 text-white px-3 py-1 rounded-lg text-sm cursor-not-allowed">
-                      Friend
-                    </button>
-                  ) : isRequested ? (
-                    <button className="bg-yellow-500 text-white px-3 py-1 rounded-lg text-sm cursor-not-allowed">
-                      Requested
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => sendRequest(u._id)}
-                      className="bg-green-500 text-white px-3 py-1 rounded-lg text-sm"
-                    >
-                      Add
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-
-            {/* FRIEND LIST */}
-            <h3 className="mt-4 mb-2 text-gray-500">Your Friends</h3>
-
-            {friends.length === 0 ? (
-              <p className="text-gray-400">No friends yet</p>
-            ) : (
-              friends.map((f) => {
-                const isOnline = onlineUsers.includes(f._id);
-
-                return (
-                  <div
-                    key={f._id}
-                    onClick={() => {
-                      openChat(f);
-                      setActiveTab("chats");
+                  <span className="wa-search-icon">🔍</span>
+                  <input
+                    className="wa-search-input"
+                    placeholder="Search username…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") searchUsers();
                     }}
-                    className="p-3 border-b flex justify-between items-center cursor-pointer hover:bg-gray-200"
-                  >
-                    <span>{f.username}</span>
-                    <span className="text-sm text-gray-400">
-                      {isOnline ? "Online" : "Offline"}
-                    </span>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        )}
+                  />
+                  <button className="wa-search-go" onClick={searchUsers}>
+                    Search
+                  </button>
+                </div>
+              </div>
 
-        {/* REQUESTS TAB */}
-        {activeTab === "requests" && (
-          <div className="p-4">
-            {requests.length === 0 ? (
-              <p className="text-center text-gray-500 mt-10">No requests</p>
-            ) : (
-              requests.map((req) => (
-                <div
-                  key={req._id}
-                  className="p-3 border-b flex justify-between items-center"
-                >
-                  <span>{req.username}</span>
+              {results.length > 0 && (
+                <>
+                  <div className="wa-section-label">Results</div>
+                  {results.map((u) => {
+                    const isFriend = friends.some((f) => f._id === u._id);
+                    const isRequested = sentRequests.includes(u._id);
+                    return (
+                      <div
+                        key={u._id}
+                        className="wa-row"
+                        style={{ cursor: "default" }}
+                      >
+                        <Avatar name={u.username} size={49} />
+                        <div className="wa-row-body">
+                          <div className="wa-row-name">{u.username}</div>
+                        </div>
+                        {isFriend ? (
+                          <span className="wa-tag wa-tag-friend">Friends</span>
+                        ) : isRequested ? (
+                          <span className="wa-tag wa-tag-pending">
+                            Already requested
+                          </span>
+                        ) : (
+                          <button
+                            className="wa-btn-add"
+                            onClick={() => sendRequest(u._id)}
+                          >
+                            + Add
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <div
+                    style={{
+                      height: 1,
+                      background: "#1f2c33",
+                      margin: "4px 0",
+                    }}
+                  />
+                </>
+              )}
 
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => acceptRequest(req._id)}
-                      className="bg-green-500 text-white px-3 py-1 rounded-lg text-sm"
-                    >
-                      Accept
-                    </button>
-
-                    <button
-                      onClick={() => rejectRequest(req._id)}
-                      className="bg-red-500 text-white px-3 py-1 rounded-lg text-sm"
-                    >
-                      Reject
-                    </button>
+              <div className="wa-section-label">Friends on App</div>
+              {showFriends.length === 0 ? (
+                <div className="wa-empty" style={{ paddingTop: 24 }}>
+                  <div className="wa-empty-icon">🤝</div>
+                  <div className="wa-empty-text">
+                    No friends yet.
+                    <br />
+                    Search and add someone!
                   </div>
                 </div>
-              ))
-            )}
-          </div>
-        )}
-      </div>
+              ) : (
+                showFriends.map((f) => {
+                  const isOnline = onlineUsers.includes(f._id);
+                  return (
+                    <div
+                      key={f._id}
+                      className="wa-row"
+                      onClick={() => {
+                        openChat(f);
+                        setActiveTab("chats");
+                      }}
+                    >
+                      <Avatar name={f.username} size={49} />
+                      <div className="wa-row-body">
+                        <div className="wa-row-name">{f.username}</div>
+                        <div
+                          className={`wa-row-sub ${isOnline ? "online-sub" : ""}`}
+                        >
+                          {isOnline ? "online" : "offline"}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </>
+          )}
 
-      {/* BOTTOM NAV */}
-      <div className="flex justify-around bg-white border-t p-2">
-        <button onClick={() => setActiveTab("chats")}>Chats</button>
-        <button onClick={() => setActiveTab("friends")}>Friends</button>
-        <button onClick={() => setActiveTab("requests")}>Requests</button>
+          {/* ── REQUESTS TAB ── */}
+          {activeTab === "requests" && (
+            <>
+              <div className="wa-section-label">Pending Requests</div>
+              {requests.length === 0 ? (
+                <div className="wa-empty">
+                  <div className="wa-empty-icon">📭</div>
+                  <div className="wa-empty-text">No pending requests</div>
+                </div>
+              ) : (
+                requests.map((req) => (
+                  <div
+                    key={req._id}
+                    className="wa-row"
+                    style={{ cursor: "default" }}
+                  >
+                    <Avatar name={req.username} size={49} />
+                    <div className="wa-row-body">
+                      <div className="wa-row-name">{req.username}</div>
+                      <div className="wa-row-sub">
+                        Wants to connect with you
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 2 }}>
+                      <button
+                        className="wa-btn-accept"
+                        title="Accept"
+                        onClick={() => acceptRequest(req._id)}
+                      >
+                        ✔
+                      </button>
+                      <button
+                        className="wa-btn-reject"
+                        title="Reject"
+                        onClick={() => rejectRequest(req._id)}
+                      >
+                        ✖
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </>
+          )}
+        </div>
+
+        {/* ══════ BOTTOM NAV ══════ */}
+        <nav className="wa-bottom-nav">
+          <button
+            className={`wa-nav-btn ${activeTab === "chats" ? "active" : ""}`}
+            onClick={() => {
+              setActiveTab("chats");
+              setSelectedFriend(null);
+            }}
+          >
+            <span className="wa-nav-icon">💬</span>Chats
+          </button>
+          <button
+            className={`wa-nav-btn ${activeTab === "friends" ? "active" : ""}`}
+            onClick={() => setActiveTab("friends")}
+          >
+            <span className="wa-nav-icon">👥</span>Friends
+          </button>
+          <button
+            className={`wa-nav-btn ${activeTab === "bot" ? "active" : ""}`}
+            onClick={() => setActiveTab("bot")}
+          >
+            <span className="wa-nav-icon">🤖</span>Assistant
+          </button>
+        </nav>
       </div>
-    </div>
+    </>
   );
 }

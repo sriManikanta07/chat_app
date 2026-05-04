@@ -35,6 +35,9 @@ exports.acceptRequest = async (req, res) => {
     const user = await User.findById(userId);
     const sender = await User.findById(senderId);
 
+    if (user.friends.includes(senderId) || sender.friends.includes(userId)) {
+      return res.json({ message: "Already friends" });
+    }
     // add both as friends
 
     user.friends.push(senderId);
@@ -103,6 +106,7 @@ exports.rejectRequest = async (req, res) => {
     );
 
     await user.save();
+    await sender.save();
 
     res.json({ message: "Friend request rejected" });
   } catch (err) {
