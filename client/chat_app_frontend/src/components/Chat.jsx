@@ -84,7 +84,7 @@ export default function Chat({
   const [showFriends, setShowFriends] = useState([]);
   const bottomRef = useRef(null);
 
-  const url = "http://localhost:5000";
+  const url = "https://chat-app-backend-h1ex.onrender.com";
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
