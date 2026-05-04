@@ -13,7 +13,7 @@ function App() {
   const [typingUser, setTypingUser] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState([]);
 
-  const url = "http://localhost:5000";
+  const url = "https://chat-app-backend-h1ex.onrender.com";
 
   // FETCH FRIENDS
   const fetchFriends = async () => {
