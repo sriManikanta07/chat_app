@@ -428,7 +428,7 @@ export default function Chat({
                       <div className={`wa-bubble ${isMe ? "me" : "them"}`}>
                         {msg.message}
                         <div className="wa-bubble-meta">
-                          <span className="wa-bubble-time">{formatTime()}</span>
+                          <span className="wa-bubble-time">{msg.createdAt}</span>
                           {isMe && <span className="wa-tick">✓✓</span>}
                         </div>
                       </div>
