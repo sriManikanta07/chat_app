@@ -418,23 +418,81 @@ export default function Chat({
                     </div>
                   </div>
                 )}
-                {messages.map((msg, i) => {
-                  const isMe = String(msg.senderId) === String(user._id);
-                  return (
-                    <div
-                      key={i}
-                      className={`wa-bubble-row ${isMe ? "me" : "them"}`}
-                    >
-                      <div className={`wa-bubble ${isMe ? "me" : "them"}`}>
-                        {msg.message}
-                        <div className="wa-bubble-meta">
-                          <span className="wa-bubble-time">{msg.createdAt}</span>
-                          {isMe && <span className="wa-tick">✓✓</span>}
+                {(() => {
+                  const getDateLabel = (dateStr) => {
+                    const msgDate = new Date(dateStr);
+                    const today = new Date();
+                    const yesterday = new Date();
+                    yesterday.setDate(today.getDate() - 1);
+
+                    const isSameDay = (a, b) =>
+                      a.getFullYear() === b.getFullYear() &&
+                      a.getMonth() === b.getMonth() &&
+                      a.getDate() === b.getDate();
+
+                    if (isSameDay(msgDate, today)) return "Today";
+                    if (isSameDay(msgDate, yesterday)) return "Yesterday";
+
+                    return msgDate.toLocaleDateString("en-GB", {
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                    }); // e.g. "2 May 2026"
+                  };
+
+                  const getMsgDay = (dateStr) => {
+                    const d = new Date(dateStr);
+                    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+                  };
+
+                  let lastDay = null;
+
+                  return messages.map((msg, i) => {
+                    const isMe = String(msg.senderId) === String(user._id);
+                    const msgDay = getMsgDay(msg.createdAt);
+                    const showDateChip = msgDay !== lastDay;
+                    lastDay = msgDay;
+
+                    return (
+                      <div key={i}>
+                        {showDateChip && (
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "center",
+                              margin: "10px 0",
+                            }}
+                          >
+                            <div className="wa-date-chip">
+                              {getDateLabel(msg.createdAt)}
+                            </div>
+                          </div>
+                        )}
+
+                        <div
+                          className={`wa-bubble-row ${isMe ? "me" : "them"}`}
+                        >
+                          <div className={`wa-bubble ${isMe ? "me" : "them"}`}>
+                            {msg.message}
+                            <div className="wa-bubble-meta">
+                              <span className="wa-bubble-time">
+                                {new Date(msg.createdAt).toLocaleTimeString(
+                                  "en-US",
+                                  {
+                                    hour: "numeric",
+                                    minute: "numeric",
+                                    hour12: true,
+                                  },
+                                )}
+                              </span>
+                              {isMe && <span className="wa-tick">✓✓</span>}
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  });
+                })()}
                 {typingUser === selectedFriend._id && (
                   <div className="wa-typing-row">
                     <div className="wa-typing-bubble">
