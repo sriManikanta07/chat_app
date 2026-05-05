@@ -71,6 +71,7 @@ function App() {
         senderId: String(msg.senderId),
         receiverId: String(msg.receiverId),
         message: msg.message,
+        createdAt: new Date(msg.createdAt), 
       }));
 
       setMessages(formatted);
