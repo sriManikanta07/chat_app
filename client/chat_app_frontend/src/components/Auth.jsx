@@ -159,7 +159,7 @@ export default function Auth({ setUser }) {
               <path d="M12 0C5.373 0 0 5.373 0 12c0 2.126.556 4.123 1.529 5.856L0 24l6.335-1.51A11.955 11.955 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.882a9.877 9.877 0 01-5.031-1.378l-.36-.214-3.742.892.952-3.651-.235-.374A9.858 9.858 0 012.118 12C2.118 6.533 6.533 2.118 12 2.118c5.467 0 9.882 4.415 9.882 9.882 0 5.467-4.415 9.882-9.882 9.882z" />
             </svg>
           </div> */}
-          <div className="wa-auth-title">ChatsApp</div>
+          <div className="wa-auth-title">SANDESHA</div>
           <div className="wa-auth-sub">
             {isLogin
               ? " What if whatsapp has a AI assistant? THIS IS OUR IDEA"
