@@ -10,11 +10,16 @@ const messageSchema = new mongoose.Schema({
     ref: "User",
   },
   message: String,
+
+  status: {
+    type: String,
+    enum: ["sent", "delivered", "seen"],
+    default: "sent",
+  },
   createdAt: {
     type: Date,
     default: Date.now,
   },
-
 });
 
 module.exports = mongoose.model("Message", messageSchema);

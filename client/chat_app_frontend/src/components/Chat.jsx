@@ -83,6 +83,9 @@ export default function Chat({
   const [friends, setFriends] = useState([]);
   const [showFriends, setShowFriends] = useState([]);
   const bottomRef = useRef(null);
+  const [botLoading, setBotLoading] = useState(false);
+  const [botResult, setBotResult] = useState(null); // { summaryText, count }
+  const [botError, setBotError] = useState(null);
 
   const url = "http://localhost:5000";
 
@@ -169,6 +172,27 @@ export default function Chat({
     return () => socket.off("refreshRequests");
   }, []);
 
+  const summarizeUnseen = async () => {
+    setBotLoading(true);
+    setBotError(null);
+    setBotResult(null);
+
+    try {
+      const { data } = await axios.post(
+        `${url}/api/messages/summarize/${user._id}`,
+      );
+
+      setBotResult({
+        summaryText: data.summary, // null if no unread messages
+        count: data.count,
+      });
+    } catch (err) {
+      console.error(err);
+      setBotError("Something went wrong. Please try again.");
+    } finally {
+      setBotLoading(false);
+    }
+  };
   const waBg = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cg opacity='.04' fill='%23fff'%3E%3Ccircle cx='10' cy='10' r='3'/%3E%3Ccircle cx='30' cy='10' r='3'/%3E%3Ccircle cx='50' cy='10' r='3'/%3E%3Ccircle cx='20' cy='25' r='3'/%3E%3Ccircle cx='40' cy='25' r='3'/%3E%3Ccircle cx='10' cy='40' r='3'/%3E%3Ccircle cx='30' cy='40' r='3'/%3E%3Ccircle cx='50' cy='40' r='3'/%3E%3Ccircle cx='20' cy='55' r='3'/%3E%3Ccircle cx='40' cy='55' r='3'/%3E%3C/g%3E%3C/svg%3E")`;
 
   return (
@@ -407,7 +431,7 @@ export default function Chat({
               style={{ height: "100%", overflow: "hidden" }}
             >
               <div className="wa-messages-bg">
-                <div className="wa-date-chip">Today</div>
+                <div className="wa-date-chip">Dead End</div>
                 {messages.length === 0 && (
                   <div className="wa-empty" style={{ paddingTop: 32 }}>
                     <div className="wa-empty-icon">🔒</div>
@@ -418,23 +442,96 @@ export default function Chat({
                     </div>
                   </div>
                 )}
-                {messages.map((msg, i) => {
-                  const isMe = String(msg.senderId) === String(user._id);
-                  return (
-                    <div
-                      key={i}
-                      className={`wa-bubble-row ${isMe ? "me" : "them"}`}
-                    >
-                      <div className={`wa-bubble ${isMe ? "me" : "them"}`}>
-                        {msg.message}
-                        <div className="wa-bubble-meta">
-                          <span className="wa-bubble-time">{formatTime()}</span>
-                          {isMe && <span className="wa-tick">✓✓</span>}
+                {/* messages rendering */}
+                {(() => {
+                  const getDateLabel = (dateStr) => {
+                    const msgDate = new Date(dateStr);
+                    const today = new Date();
+                    const yesterday = new Date();
+                    yesterday.setDate(today.getDate() - 1);
+
+                    const isSameDay = (a, b) =>
+                      a.getFullYear() === b.getFullYear() &&
+                      a.getMonth() === b.getMonth() &&
+                      a.getDate() === b.getDate();
+
+                    if (isSameDay(msgDate, today)) return "Today";
+                    if (isSameDay(msgDate, yesterday)) return "Yesterday";
+
+                    return msgDate.toLocaleDateString("en-GB", {
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                    }); // e.g. "2 May 2026"
+                  };
+
+                  const getMsgDay = (dateStr) => {
+                    const d = new Date(dateStr);
+                    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+                  };
+
+                  let lastDay = null;
+
+                  return messages.map((msg, i) => {
+                    const isMe = String(msg.senderId) === String(user._id);
+                    const msgDay = getMsgDay(msg.createdAt);
+                    const showDateChip = msgDay !== lastDay;
+                    lastDay = msgDay;
+
+                    return (
+                      <div key={i}>
+                        {showDateChip && (
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "center",
+                              margin: "10px 0",
+                            }}
+                          >
+                            <div className="wa-date-chip">
+                              {getDateLabel(msg.createdAt)}
+                            </div>
+                          </div>
+                        )}
+
+                        <div
+                          className={`wa-bubble-row ${isMe ? "me" : "them"}`}
+                        >
+                          <div className={`wa-bubble ${isMe ? "me" : "them"}`}>
+                            {msg.message}
+                            <div className="wa-bubble-meta">
+                              <span className="wa-bubble-time">
+                                {new Date(msg.createdAt).toLocaleTimeString(
+                                  "en-US",
+                                  {
+                                    hour: "numeric",
+                                    minute: "numeric",
+                                    hour12: true,
+                                  },
+                                )}
+                              </span>
+                              {isMe && (
+                                <span
+                                  className="wa-tick"
+                                  style={{
+                                    color:
+                                      msg.status === "seen"
+                                        ? "#53bdeb"
+                                        : "#8696a0",
+                                  }}
+                                >
+                                  {msg.status === "sent" && "✓"}
+                                  {msg.status === "delivered" && "✓✓"}
+                                  {msg.status === "seen" && "✓✓"}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  });
+                })()}
                 {typingUser === selectedFriend._id && (
                   <div className="wa-typing-row">
                     <div className="wa-typing-bubble">
@@ -491,12 +588,157 @@ export default function Chat({
           )}
 
           {activeTab === "bot" && (
-            <div className="wa-bot-container">
-              <div className="wa-bot-header">
-                <h3>AI Assistant</h3>
+            <div
+              style={{
+                padding: "24px 16px",
+                display: "flex",
+                flexDirection: "column",
+                gap: 16,
+              }}
+            >
+              {/* intro card */}
+              <div
+                style={{
+                  background: "#202c33",
+                  borderRadius: 12,
+                  padding: "16px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                }}
+              >
+                <div
+                  style={{ fontSize: 15, fontWeight: 700, color: "#e9edef" }}
+                >
+                  🤖 AI Message Assistant
+                </div>
+                <div
+                  style={{ fontSize: 13, color: "#8696a0", lineHeight: 1.6 }}
+                >
+                  Summarizes all your unread messages so you know what everyone
+                  is saying — without opening each chat.
+                </div>
               </div>
 
-              <p>AI Assistant is under development</p>
+              {/* action button */}
+              <button
+                onClick={summarizeUnseen}
+                disabled={botLoading}
+                style={{
+                  padding: "13px",
+                  background: botLoading ? "#2a3942" : "#00a884",
+                  border: "none",
+                  borderRadius: 10,
+                  color: botLoading ? "#8696a0" : "#111b21",
+                  fontSize: 15,
+                  fontWeight: 700,
+                  cursor: botLoading ? "not-allowed" : "pointer",
+                  fontFamily: "inherit",
+                  transition: "background .2s",
+                }}
+              >
+                {botLoading
+                  ? "⏳ Summarizing..."
+                  : "✨ Summarize Unread Messages"}
+              </button>
+
+              {/* error */}
+              {botError && (
+                <div
+                  style={{
+                    background: "#2d1018",
+                    border: "1px solid #5a2030",
+                    borderRadius: 10,
+                    padding: "12px 14px",
+                    color: "#f15c6d",
+                    fontSize: 13,
+                  }}
+                >
+                  {botError}
+                </div>
+              )}
+
+              {/* no unread */}
+              {botResult?.count === 0 && (
+                <div
+                  style={{
+                    textAlign: "center",
+                    color: "#8696a0",
+                    fontSize: 14,
+                    padding: "32px 0",
+                  }}
+                >
+                  🎉 You're all caught up — no unread messages!
+                </div>
+              )}
+
+              {/* summary result */}
+              {botResult?.summaryText && (
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: "#00a884",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                    }}
+                  >
+                    Summary · {botResult.count}{" "}
+                    {botResult.count === 1 ? "person" : "people"}
+                  </div>
+
+                  {/* render each **Name**: summary line as its own card */}
+                  {botResult.summaryText
+                    .split("\n")
+                    .filter((line) => line.trim())
+                    .map((line, i) => {
+                      const match = line.match(/^\*\*(.+?)\*\*:\s*(.+)$/);
+                      if (match) {
+                        return (
+                          <div
+                            key={i}
+                            style={{
+                              background: "#202c33",
+                              borderRadius: 10,
+                              padding: "12px 14px",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: 4,
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontWeight: 700,
+                                color: "#00a884",
+                                fontSize: 13,
+                              }}
+                            >
+                              {match[1]}
+                            </div>
+                            <div
+                              style={{
+                                color: "#e9edef",
+                                fontSize: 14,
+                                lineHeight: 1.5,
+                              }}
+                            >
+                              {match[2]}
+                            </div>
+                          </div>
+                        );
+                      }
+                      // fallback for lines that don't match the pattern
+                      return (
+                        <div key={i} style={{ color: "#8696a0", fontSize: 13 }}>
+                          {line}
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
             </div>
           )}
 
